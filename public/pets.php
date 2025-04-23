@@ -72,20 +72,75 @@ if ($result && $result->num_rows > 0) {
     }
 }
 
-// Check if pet was added to favorites
+// Get user's favorites if logged in
+$user_favorites = [];
+if (isset($_SESSION['user_id'])) {
+    $user_id = $_SESSION['user_id'];
+    $favorites_query = "SELECT pet_id FROM Favorites WHERE user_id = ?";
+    $favorites_stmt = $conn->prepare($favorites_query);
+    $favorites_stmt->bind_param("i", $user_id);
+    $favorites_stmt->execute();
+    $favorites_result = $favorites_stmt->get_result();
+    
+    if ($favorites_result && $favorites_result->num_rows > 0) {
+        while ($row = $favorites_result->fetch_assoc()) {
+            $user_favorites[] = $row['pet_id'];
+        }
+    }
+}
+
+// Handle adding or removing favorites
 $favorite_message = '';
-if (isset($_POST['add_favorite'])) {
-    if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
+if (isset($_POST['add_favorite']) || isset($_POST['remove_favorite'])) {
+    if (!isset($_SESSION['user_id'])) {
         // Redirect to login with return URL
         header("Location: login.php?redirect=pets.php");
         exit;
     } else {
-        $pet_id = $_POST['pet_id'];
+        $pet_id = isset($_POST['pet_id']) ? (int)$_POST['pet_id'] : 0;
         $user_id = $_SESSION['user_id'];
         
-        // In a real application, you would save to a Favorites table
-        // For now, just show a success message
-        $favorite_message = "Pet added to your favorites!";
+        if (isset($_POST['add_favorite'])) {
+            // Check if this pet is already in favorites
+            $check_query = "SELECT * FROM Favorites WHERE user_id = ? AND pet_id = ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("ii", $user_id, $pet_id);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+            
+            if ($check_result->num_rows == 0) {
+                // Add to favorites
+                $insert_query = "INSERT INTO Favorites (user_id, pet_id) VALUES (?, ?)";
+                $insert_stmt = $conn->prepare($insert_query);
+                $insert_stmt->bind_param("ii", $user_id, $pet_id);
+                
+                if ($insert_stmt->execute()) {
+                    $favorite_message = "Pet added to your favorites!";
+                    // Add to the local array for immediate UI update
+                    $user_favorites[] = $pet_id;
+                } else {
+                    $favorite_message = "Error adding pet to favorites.";
+                }
+            } else {
+                $favorite_message = "This pet is already in your favorites.";
+            }
+        } else if (isset($_POST['remove_favorite'])) {
+            // Remove from favorites
+            $delete_query = "DELETE FROM Favorites WHERE user_id = ? AND pet_id = ?";
+            $delete_stmt = $conn->prepare($delete_query);
+            $delete_stmt->bind_param("ii", $user_id, $pet_id);
+            
+            if ($delete_stmt->execute()) {
+                $favorite_message = "Pet removed from your favorites.";
+                // Remove from the local array for immediate UI update
+                $key = array_search($pet_id, $user_favorites);
+                if ($key !== false) {
+                    unset($user_favorites[$key]);
+                }
+            } else {
+                $favorite_message = "Error removing pet from favorites.";
+            }
+        }
     }
 }
 
@@ -170,6 +225,7 @@ include_once '../includes/header.php';
                 </div>
             <?php else: ?>
                 <?php foreach ($pets as $pet): ?>
+                    <?php $is_favorite = in_array($pet['pet_id'], $user_favorites); ?>
                     <div class="pet-card <?php if ($pet['is_featured']) echo 'featured'; ?>">
                         <?php if ($pet['is_featured']): ?>
                             <div class="featured-badge">
@@ -187,9 +243,15 @@ include_once '../includes/header.php';
                             <div class="pet-actions">
                                 <form method="post" action="pets.php" class="favorite-form">
                                     <input type="hidden" name="pet_id" value="<?php echo $pet['pet_id']; ?>">
-                                    <button type="submit" name="add_favorite" class="btn-favorite" title="Add to Favorites">
-                                        <i class="far fa-heart"></i>
-                                    </button>
+                                    <?php if ($is_favorite): ?>
+                                        <button type="submit" name="remove_favorite" class="btn-favorite active" title="Remove from Favorites">
+                                            <i class="fas fa-heart"></i>
+                                        </button>
+                                    <?php else: ?>
+                                        <button type="submit" name="add_favorite" class="btn-favorite" title="Add to Favorites">
+                                            <i class="far fa-heart"></i>
+                                        </button>
+                                    <?php endif; ?>
                                 </form>
                             </div>
                         </div>
@@ -223,7 +285,6 @@ include_once '../includes/header.php';
                             
                             <div class="pet-buttons">
                                 <a href="pet-details.php?id=<?php echo $pet['pet_id']; ?>" class="btn btn-primary">View Details</a>
-                                <a href="adoption-form.php?id=<?php echo $pet['pet_id']; ?>" class="btn btn-secondary">Adopt Me</a>
                             </div>
                         </div>
                     </div>
@@ -238,7 +299,7 @@ include_once '../includes/header.php';
     <div class="modal-content">
         <span class="close">&times;</span>
         <h2>Sign in Required</h2>
-        <p>To adopt or add pets to favorites, please sign in or create an account.</p>
+        <p>To add pets to favorites, please sign in or create an account.</p>
         <div class="modal-buttons">
             <a href="login.php?redirect=pets.php" class="btn btn-primary">Sign In</a>
             <a href="register.php?redirect=pets.php" class="btn btn-secondary">Create Account</a>
@@ -644,25 +705,7 @@ include_once '../includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle favorite button click
-    const favoriteButtons = document.querySelectorAll('.btn-favorite');
-    favoriteButtons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            // Check if user is logged in
-            <?php if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true): ?>
-                e.preventDefault();
-                document.getElementById('login-modal').classList.add('show');
-                return false;
-            <?php else: ?>
-                // If logged in, toggle heart icon
-                this.querySelector('i').classList.toggle('far');
-                this.querySelector('i').classList.toggle('fas');
-                this.classList.toggle('active');
-            <?php endif; ?>
-        });
-    });
-    
-    // Close login modal
+    // Handle modal close
     const closeBtn = document.querySelector('.modal .close');
     if (closeBtn) {
         closeBtn.addEventListener('click', function() {
@@ -683,6 +726,18 @@ document.addEventListener('DOMContentLoaded', function() {
     filterSelects.forEach(select => {
         select.addEventListener('change', function() {
             document.querySelector('.filter-form').submit();
+        });
+    });
+    
+    // Check if user is logged in before submitting favorite form
+    const favoriteButtons = document.querySelectorAll('.btn-favorite');
+    favoriteButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            <?php if (!isset($_SESSION['user_id'])): ?>
+                e.preventDefault();
+                document.getElementById('login-modal').classList.add('show');
+                return false;
+            <?php endif; ?>
         });
     });
 });
