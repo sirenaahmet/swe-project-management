@@ -501,13 +501,16 @@ $conn->close();
             
             <ul class="sidebar-menu">
                 <li><a href="index.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="pets.php"><i class="fas fa-paw"></i> Manage Pets</a></li>
+                
                 <li><a href="adoptions.php"><i class="fas fa-home"></i> Adoptions</a></li>
                 <li><a href="fosters.php"><i class="fas fa-heart"></i> Fosters</a></li>
+                <!--
+                <li><a href="pets.php"><i class="fas fa-paw"></i> Manage Pets</a></li>
                 <li><a href="users.php"><i class="fas fa-users"></i> Users</a></li>
                 <li><a href="staff.php"><i class="fas fa-user-tie"></i> Staff</a></li>
                 <li><a href="blog.php"><i class="fas fa-blog"></i> Blog Posts</a></li>
                 <li><a href="settings.php"><i class="fas fa-cog"></i> Settings</a></li>
+    -->
             </ul>
             
             <div class="sidebar-footer">

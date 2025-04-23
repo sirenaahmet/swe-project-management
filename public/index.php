@@ -5,14 +5,21 @@ $pageTitle = "Home";
 // Include the header
 include_once '../includes/header.php';
 
-// Fetch featured pets from database (example)
-// $featured_pets = $db->query("SELECT * FROM Pet WHERE is_featured = 1 AND status = 'Available' LIMIT 6")->fetchAll();
-// For now, we'll use dummy data
-$featured_pets = [
-    ['pet_id' => 1, 'name' => 'Max', 'species' => 'Dog', 'breed' => 'Golden Retriever', 'age' => 3, 'photos' => 'dog1.jpg'],
-    ['pet_id' => 2, 'name' => 'Luna', 'species' => 'Cat', 'breed' => 'Siamese', 'age' => 2, 'photos' => 'cat1.jpg'],
-    ['pet_id' => 3, 'name' => 'Buddy', 'species' => 'Dog', 'breed' => 'Labrador', 'age' => 1, 'photos' => 'dog2.jpg'],
-];
+// Include database connection if not already included in header
+if (!isset($conn)) {
+    require_once '../includes/db.php';
+}
+
+// Fetch featured pets from database
+$sql = "SELECT * FROM Pet WHERE is_featured = 1 AND status = 'Available' ORDER BY pet_id DESC LIMIT 3";
+$result = $conn->query($sql);
+
+$featured_pets = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $featured_pets[] = $row;
+    }
+}
 ?>
 
 <div class="hero-section">
@@ -34,18 +41,29 @@ $featured_pets = [
         <p class="section-description">Meet some of our amazing pets looking for a loving home</p>
         
         <div class="pet-cards">
-            <?php foreach ($featured_pets as $pet): ?>
-                <div class="pet-card">
-                    <div class="pet-image">
-                        <img src="../assets/images/pets/<?php echo $pet['photos']; ?>" alt="<?php echo $pet['name']; ?>">
+            <?php if (count($featured_pets) > 0): ?>
+                <?php foreach ($featured_pets as $pet): ?>
+                    <div class="pet-card">
+                        <div class="pet-image">
+                            <?php if (!empty($pet['photos'])): ?>
+                                <img src="../<?php echo $pet['photos']; ?>" alt="<?php echo htmlspecialchars($pet['name']); ?>">
+                            <?php else: ?>
+                                <img src="../assets/images/pet-placeholder.jpg" alt="No image available">
+                            <?php endif; ?>
+                        </div>
+                        <div class="pet-details">
+                            <h3><?php echo htmlspecialchars($pet['name']); ?></h3>
+                            <p><?php echo htmlspecialchars($pet['breed'] ? $pet['breed'] : $pet['species']); ?>, 
+                               <?php echo $pet['age']; ?> <?php echo $pet['age'] == 1 ? 'year' : 'years'; ?> old</p>
+                            <a href="pet-details.php?id=<?php echo $pet['pet_id']; ?>" class="btn btn-outline-secondary">View Details</a>
+                        </div>
                     </div>
-                    <div class="pet-details">
-                        <h3><?php echo $pet['name']; ?></h3>
-                        <p><?php echo $pet['breed']; ?>, <?php echo $pet['age']; ?> years old</p>
-                        <a href="pet-details.php?id=<?php echo $pet['pet_id']; ?>" class="btn btn-outline-secondary">View Details</a>
-                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="no-pets-message">
+                    <p>No featured pets available at the moment. Check back soon!</p>
                 </div>
-            <?php endforeach; ?>
+            <?php endif; ?>
         </div>
         
         <div class="view-all">
