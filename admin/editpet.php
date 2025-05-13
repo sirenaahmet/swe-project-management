@@ -12,13 +12,72 @@ if(!isset($_SESSION["admin_loggedin"]) || $_SESSION["admin_loggedin"] !== true){
 require_once '../includes/db.php';
 
 // Define variables and initialize with empty values
-$name = $species = $breed = $age = $gender = $status = "";
+$name = $species = $breed = $age = $gender = $status = $photos = $videos = "";
 $name_err = $species_err = $status_err = $photo_err = "";
 $success_message = "";
-$is_featured = false; // Initialize is_featured
+$is_featured = false;
+$current_photos = "";
+
+// Check if pet ID is specified in URL
+if(isset($_GET["id"]) && !empty(trim($_GET["id"]))){
+    // Get pet ID from URL
+    $pet_id = trim($_GET["id"]);
+    
+    // Fetch pet data if form is not submitted
+    if($_SERVER["REQUEST_METHOD"] != "POST"){
+        // Prepare a select statement
+        $sql = "SELECT * FROM Pet WHERE pet_id = ?";
+        
+        if($stmt = $conn->prepare($sql)){
+            // Bind variables to the prepared statement as parameters
+            $stmt->bind_param("i", $param_id);
+            
+            // Set parameters
+            $param_id = $pet_id;
+            
+            // Attempt to execute the prepared statement
+            if($stmt->execute()){
+                $result = $stmt->get_result();
+                
+                if($result->num_rows == 1){
+                    // Fetch the data
+                    $pet = $result->fetch_assoc();
+                    
+                    // Retrieve pet information
+                    $name = $pet["name"];
+                    $species = $pet["species"];
+                    $breed = $pet["breed"];
+                    $age = $pet["age"];
+                    $gender = $pet["gender"];
+                    $status = $pet["status"];
+                    $is_featured = $pet["is_featured"];
+                    $photos = $pet["photos"];
+                    $current_photos = $photos; // Store current photos
+                    $videos = $pet["videos"];
+                } else{
+                    // Pet ID not found
+                    header("location: pets.php");
+                    exit();
+                }
+            } else{
+                echo "Oops! Something went wrong. Please try again later.";
+            }
+            
+            // Close statement
+            $stmt->close();
+        }
+    }
+} else {
+    // Pet ID parameter missing
+    header("location: pets.php");
+    exit();
+}
 
 // Processing form data when form is submitted
 if($_SERVER["REQUEST_METHOD"] == "POST"){
+    
+    // Store pet ID for later use
+    $pet_id = $_POST["pet_id"];
     
     // Validate name
     if(empty(trim($_POST["name"]))){
@@ -46,12 +105,24 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
     $age = !empty($_POST["age"]) ? intval($_POST["age"]) : null;
     $gender = !empty($_POST["gender"]) ? trim($_POST["gender"]) : null;
     $is_featured = isset($_POST["is_featured"]) ? 1 : 0;
-    
-    // Initialize photos and videos variables
-    $photos = null;
     $videos = !empty($_POST["videos"]) ? trim($_POST["videos"]) : null;
     
-    // Handle photo upload
+    // Get existing photos path
+    $sql = "SELECT photos FROM Pet WHERE pet_id = ?";
+    if($stmt = $conn->prepare($sql)){
+        $stmt->bind_param("i", $pet_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if($row = $result->fetch_assoc()){
+            $current_photos = $row["photos"];
+        }
+        $stmt->close();
+    }
+    
+    // Initialize photos with current photos value (in case no new upload)
+    $photos = $current_photos;
+    
+    // Handle photo upload (only if a new photo is uploaded)
     if(isset($_FILES["pet_photo"]) && $_FILES["pet_photo"]["error"] == 0) {
         $allowed = ["jpg" => "image/jpg", "jpeg" => "image/jpeg", "gif" => "image/gif", "png" => "image/png"];
         $filename = $_FILES["pet_photo"]["name"];
@@ -96,33 +167,34 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
             // Save the file
             if(move_uploaded_file($_FILES["pet_photo"]["tmp_name"], $upload_path)) {
                 $photos = 'assets/uploads/pets/' . $new_filename; // Store the relative path in database
+                
+                // Delete the old photo if it exists (optional)
+                if(!empty($current_photos) && file_exists($root_dir . $current_photos)) {
+                    unlink($root_dir . $current_photos);
+                }
             } else {
                 $photo_err = "Error uploading the file.";
             }
         }
     }
     
-    // Check input errors before inserting into database
+    // Check input errors before updating the database
     if(empty($name_err) && empty($species_err) && empty($status_err) && empty($photo_err)){
         
-        // Prepare an insert statement
-        $sql = "INSERT INTO Pet (name, species, breed, age, gender, status, is_featured, created_by, photos, videos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        // Prepare an update statement
+        $sql = "UPDATE Pet SET name = ?, species = ?, breed = ?, age = ?, gender = ?, status = ?, is_featured = ?, photos = ?, videos = ? WHERE pet_id = ?";
          
         if($stmt = $conn->prepare($sql)){
             // Bind variables to the prepared statement as parameters
-            $stmt->bind_param("sssississs", $name, $species, $breed, $age, $gender, $status, $is_featured, $admin_id, $photos, $videos);
+            $stmt->bind_param("sssississi", $name, $species, $breed, $age, $gender, $status, $is_featured, $photos, $videos, $param_id);
             
             // Set parameters
-            $admin_id = $_SESSION["admin_id"];
+            $param_id = $pet_id;
             
             // Attempt to execute the prepared statement
             if($stmt->execute()){
-                // Pet added successfully
-                $success_message = "Pet added successfully!";
-                
-                // Clear form values after successful submission
-                $name = $species = $breed = $age = $gender = $status = "";
-                $photos = $videos = "";
+                // Pet updated successfully
+                $success_message = "Pet updated successfully!";
             } else{
                 echo "Oops! Something went wrong. Please try again later.";
             }
@@ -142,7 +214,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add New Pet - Paws & Hearts Admin</title>
+    <title>Edit Pet - Paws & Hearts Admin</title>
     <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -413,7 +485,6 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
         
         .file-preview {
             margin-top: 12px;
-            display: none;
         }
         
         .file-preview img {
@@ -434,6 +505,17 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
         .file-info i {
             margin-right: 5px;
             color: #81253f;
+        }
+        
+        .current-image {
+            margin-bottom: 12px;
+        }
+        
+        .current-image img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            border: 1px solid #d2d2d7;
         }
         
         /* Buttons */
@@ -582,7 +664,7 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
         <!-- Main Content -->
         <div class="main-content">
             <div class="page-header">
-                <h2>Add New Pet</h2>
+                <h2>Edit Pet</h2>
                 <a href="pets.php" class="back-btn">
                     <i class="fas fa-arrow-left"></i> Back to Pets
                 </a>
@@ -598,7 +680,9 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
             <div class="form-container">
                 <h3 class="form-title">Pet Information</h3>
                 
-                <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="post" enctype="multipart/form-data">
+                <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"] . "?id=" . $pet_id); ?>" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="pet_id" value="<?php echo $pet_id; ?>">
+                    
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="name">Pet Name *</label>
@@ -652,14 +736,21 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                         
                         <div class="form-group">
                             <label for="pet_photo">Pet Photo</label>
+                            <?php if(!empty($photos)): ?>
+                                <div class="current-image">
+                                    <p><strong>Current Image:</strong></p>
+                                    <img src="<?php echo htmlspecialchars('../' . $photos); ?>" alt="Current Pet Photo">
+                                </div>
+                            <?php endif; ?>
                             <label for="pet_photo" class="custom-file-upload">
-                                <i class="fas fa-upload"></i> Choose Photo
+                                <i class="fas fa-upload"></i> Change Photo
                             </label>
                             <input type="file" id="pet_photo" name="pet_photo" accept="image/*">
                             <?php if(!empty($photo_err)): ?>
                                 <span class="error-message"><?php echo $photo_err; ?></span>
                             <?php endif; ?>
-                            <div id="file-preview" class="file-preview">
+                            <div id="file-preview" class="file-preview" style="display: none;">
+                                <p><strong>New Image:</strong></p>
                                 <img id="preview-image" src="#" alt="Preview">
                                 <div class="file-info">
                                     <i class="fas fa-file-image"></i>
@@ -677,8 +768,8 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                     </div>
                     
                     <div class="form-buttons">
-                        <button type="reset" class="btn btn-secondary">Reset</button>
-                        <button type="submit" class="btn btn-primary">Add Pet</button>
+                        <a href="pets.php" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
                     </div>
                 </form>
             </div>
@@ -700,13 +791,6 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
                 
                 reader.readAsDataURL(file);
             }
-        });
-        
-        // Reset form
-        document.querySelector('button[type="reset"]').addEventListener('click', function() {
-            document.getElementById('file-preview').style.display = 'none';
-            document.getElementById('preview-image').src = '#';
-            document.getElementById('file-name').textContent = '';
         });
     </script>
 </body>
