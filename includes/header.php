@@ -39,6 +39,7 @@ session_start();
                     <li><a href="pets.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'pets.php') ? 'active' : ''; ?>">Pets</a></li>
                     <li><a href="about.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'about-us.php') ? 'active' : ''; ?>">About Us</a></li>
                     <li><a href="contact.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'contact.php') ? 'active' : ''; ?>">Contact</a></li>
+                    <li><a href="blog.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'blog.php') ? 'active' : ''; ?>">Blogs</a></li>
                 </ul>
             </nav>
             
@@ -67,6 +68,7 @@ session_start();
             <li><a href="pets.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'pets.php') ? 'active' : ''; ?>">Pets</a></li>
             <li><a href="about-us.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'about-us.php') ? 'active' : ''; ?>">About Us</a></li>
             <li><a href="contact.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'contact.php') ? 'active' : ''; ?>">Contact</a></li>
+            <li><a href="blog.php" class="<?php echo (basename($_SERVER['PHP_SELF']) == 'blog.php') ? 'active' : ''; ?>">Blogs</a></li>
             
             <?php if(isset($_SESSION['user_id'])): ?>
                 <li><a href="account.php">My Account</a></li>
